@@ -14,7 +14,8 @@
   not appear in the posted description, so leave them or delete them as you like.
 -->
 
-Closes #
+Issue: #  <!-- design pull request: write "Refs #N", which leaves the issue open when you merge.
+                build pull request: write "Closes #N". -->
 Traces to: UC-STU-deactivate-student, docs/design/stu.md
 Design pull request: <!-- build pull request only: link your merged design pull request -->
 
