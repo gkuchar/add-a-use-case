@@ -1489,6 +1489,7 @@ Details:
 - Deactivation takes effect immediately. A session the student already has ends at her next request, not only her next login (FR-SEC-active-account).
 - A user that BR-student-lifecycle does not admit is denied (FR-SEC-deny-unauthorized).
 - Deactivation removes the student from her team, as UC-TEA-remove-student does. Her weekly activity reports and peer evaluations stay with the team and weeks they were written for. Reactivation does not restore her team; she is on no team until a course admin assigns her (UC-TEA-assign-students).
+- Her former teammates no longer evaluate her for any week after her deactivation, and owe her no evaluation (BR-submission-owed). Peer evaluations already written, of her and by her, are kept, and the peer evaluation reports for the weeks they cover still show them (UC-EVA-section-evaluation-report, UC-EVA-student-evaluation-report).
 
 **Related Use Cases:** UC-STU-delete-student: Delete a student; UC-STU-reactivate-student: Reactivate a student
 **Assumptions:**
@@ -2372,6 +2373,8 @@ An example of the generated report:
 | John Doe | 54/60 | Tim Smith | Good work. | Nothing. |
 |  |  | Lily Fisher | Need to work harder. | Dr. Wei, I need to talk more about John. |
 | Lily Fisher | … | … | … | … |
+
+For a given week, the report includes every student on a team in the course section, and also any student who was evaluated or evaluated a teammate that week, even if she is no longer on a team or active.
 
 The report shall show who did not turn in the peer evaluation for that week, meaning the students who owe it (BR-submission-owed).
 
