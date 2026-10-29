@@ -1473,6 +1473,10 @@ Details:
 7. Use case ends.
 
 **Extensions:**
+- **5a. The course admin or instructor does not confirm the deactivation:**
+  - 5a1. The system leaves the student's account and team membership unchanged.
+  - 5a2. Use case ends.
+
 **Priority:** Low
 **Frequency of Use:** Rare. Occurs occasionally when a student withdraws from a course section.
 **Business Rules:** BR-student-lifecycle
