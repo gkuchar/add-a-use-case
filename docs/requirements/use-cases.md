@@ -1529,6 +1529,7 @@ Details:
 **Associated Information:**
 - The course admin or instructor shall be able to cancel the use case at any time prior to submitting it.
 - A reactivated student is on no team until a course admin assigns her (UC-TEA-assign-students, BR-team-assignment-required).
+- Until this use case is built, editing a student can reactivate her; this use case should replace that path.
 
 **Related Use Cases:** UC-STU-delete-student: Delete a student; UC-STU-deactivate-student: Deactivate a student
 **Assumptions:**
