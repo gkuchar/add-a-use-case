@@ -1476,6 +1476,9 @@ Details:
 - **5a. The course admin or instructor does not confirm the deactivation:**
   - 5a1. The system leaves the student's account and team membership unchanged.
   - 5a2. Use case ends.
+- **6a. The student has already been deactivated** (for example, by another course admin or instructor after step 2):
+  - 6a1. The system leaves the student deactivated, changes nothing else, and alerts the course admin or instructor that this student is already deactivated.
+  - 6a2. Use case ends.
 
 **Priority:** Low
 **Frequency of Use:** Rare. Occurs occasionally when a student withdraws from a course section.
