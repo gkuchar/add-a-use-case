@@ -5,15 +5,14 @@ import org.springframework.core.convert.converter.Converter;
 import org.springframework.security.authentication.AbstractAuthenticationToken;
 import org.springframework.security.authentication.DisabledException;
 import org.springframework.security.oauth2.jwt.Jwt;
-import team.projectpulse.user.PeerEvaluationUser;
 import team.projectpulse.user.UserRepository;
 
 /**
  * Refuses a bearer token whose user has been deactivated or no longer exists (FR-SEC-active-account), so that
  * deactivation takes effect at the user's next request rather than when her token expires.
  *
- * <p>Wraps the converter that maps the token's claims to authorities, then reads the {@code userId} claim's user: one
- * primary-key read per bearer request. A {@link DisabledException} reaches {@link CustomBearerTokenAuthenticationEntryPoint},
+ * <p>Wraps the converter that maps the token's claims to authorities, then reads whether the {@code userId} claim's user is
+ * enabled: one single-column primary-key read per bearer request. A {@link DisabledException} reaches {@link CustomBearerTokenAuthenticationEntryPoint},
  * which hands it to {@code ExceptionHandlerAdvice}'s {@code AccountStatusException} handler for the {@code 401} envelope.
  */
 public class ActiveAccountJwtAuthenticationConverter implements Converter<Jwt, AbstractAuthenticationToken> {
@@ -35,9 +34,7 @@ public class ActiveAccountJwtAuthenticationConverter implements Converter<Jwt, A
         if (!(userIdClaim instanceof Number userId)) {
             throw new DisabledException("The token names no user.");
         }
-        boolean active = this.userRepository.findById(userId.intValue())
-                .map(PeerEvaluationUser::isEnabled)
-                .orElse(false);
+        boolean active = this.userRepository.findEnabledById(userId.intValue()).orElse(false);
         if (!active) {
             throw new DisabledException("The account is deactivated or no longer exists.");
         }
