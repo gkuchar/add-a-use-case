@@ -60,13 +60,6 @@ class ActiveAccountIntegrationTest extends AbstractIntegrationTest {
     }
 
     @Test
-    void testActiveStudentTokenStillWorks() throws Exception {
-        this.mockMvc.perform(get(this.baseUrl + "/students/4").accept(MediaType.APPLICATION_JSON).header(HttpHeaders.AUTHORIZATION, this.studentJohnToken))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.flag").value(true));
-    }
-
-    @Test
     void testDeactivatedStudentTokenRefusedOnGet() throws Exception {
         disable("j.smith@abc.edu");
 

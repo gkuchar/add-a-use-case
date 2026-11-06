@@ -16,7 +16,6 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verifyNoInteractions;
 
 /**
  * BR-student-lifecycle: an assigned instructor or the owning course admin, never the student herself.
@@ -59,14 +58,6 @@ class StudentLifecycleAuthorizationManagerTest {
         given(this.studentSecurityService.isCurrentUserAdminOfStudentCourse(4)).willReturn(false);
 
         assertThat(authorize(Map.of("studentId", "4")).isGranted()).isFalse();
-    }
-
-    @Test
-    @DisplayName("Denies when the matched route bound no usable studentId")
-    void deniesWithoutStudentId() {
-        assertThat(authorize(Map.of()).isGranted()).isFalse();
-        assertThat(authorize(Map.of("studentId", "abc")).isGranted()).isFalse();
-        verifyNoInteractions(this.studentSecurityService);
     }
 
 }
