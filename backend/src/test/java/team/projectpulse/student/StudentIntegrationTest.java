@@ -36,6 +36,9 @@ class StudentIntegrationTest extends AbstractIntegrationTest {
     @Autowired
     JsonMapper jsonMapper;
 
+    @Autowired
+    StudentRepository studentRepository;
+
     String adminToken;
 
     String instructorBillToken;
@@ -305,6 +308,55 @@ class StudentIntegrationTest extends AbstractIntegrationTest {
                 .andExpect(jsonPath("$.code").value(StatusCode.FORBIDDEN))
                 .andExpect(jsonPath("$.message").value("No permission."))
                 .andExpect(jsonPath("$.data").value("Access Denied"));
+    }
+
+
+    // BR-student-lifecycle: the edit path no longer deactivates (UC-STU-deactivate-student).
+
+    private String johnUpdateJson(String firstName, boolean enabled) {
+        Map<String, Object> studentDto = new HashMap<>();
+        studentDto.put("username", "j.smith@abc.edu");
+        studentDto.put("firstName", firstName);
+        studentDto.put("lastName", "Smith");
+        studentDto.put("email", "j.smith@abc.edu");
+        studentDto.put("enabled", enabled);
+        return this.jsonMapper.writeValueAsString(studentDto);
+    }
+
+    private void disableJohnDirectly() {
+        Student john = this.studentRepository.findById(4).orElseThrow();
+        john.setEnabled(false);
+        this.studentRepository.saveAndFlush(john);
+    }
+
+    @Test
+    void testInstructorBillCannotDeactivateStudentThroughUpdate() throws Exception {
+        this.mockMvc.perform(put(this.baseUrl + "/students/4").contentType(MediaType.APPLICATION_JSON).content(johnUpdateJson("John", false)).accept(MediaType.APPLICATION_JSON).header(HttpHeaders.AUTHORIZATION, this.instructorBillToken))
+                .andExpect(jsonPath("$.flag").value(false))
+                .andExpect(jsonPath("$.code").value(StatusCode.INVALID_ARGUMENT))
+                .andExpect(jsonPath("$.message").value("Deactivate a student with the Deactivate action."));
+        this.mockMvc.perform(get(this.baseUrl + "/students/4").accept(MediaType.APPLICATION_JSON).header(HttpHeaders.AUTHORIZATION, this.instructorBillToken))
+                .andExpect(jsonPath("$.data.enabled").value(true))
+                .andExpect(jsonPath("$.data.teamId").value(1));
+    }
+
+    @Test
+    void testInstructorBillReactivatesStudentThroughUpdate() throws Exception {
+        disableJohnDirectly();
+        this.mockMvc.perform(put(this.baseUrl + "/students/4").contentType(MediaType.APPLICATION_JSON).content(johnUpdateJson("John", true)).accept(MediaType.APPLICATION_JSON).header(HttpHeaders.AUTHORIZATION, this.instructorBillToken))
+                .andExpect(jsonPath("$.flag").value(true))
+                .andExpect(jsonPath("$.code").value(StatusCode.SUCCESS))
+                .andExpect(jsonPath("$.data.enabled").value(true));
+    }
+
+    @Test
+    void testInstructorBillRenamesDeactivatedStudent() throws Exception {
+        disableJohnDirectly();
+        this.mockMvc.perform(put(this.baseUrl + "/students/4").contentType(MediaType.APPLICATION_JSON).content(johnUpdateJson("Johnny", false)).accept(MediaType.APPLICATION_JSON).header(HttpHeaders.AUTHORIZATION, this.instructorBillToken))
+                .andExpect(jsonPath("$.flag").value(true))
+                .andExpect(jsonPath("$.code").value(StatusCode.SUCCESS))
+                .andExpect(jsonPath("$.data.firstName").value("Johnny"))
+                .andExpect(jsonPath("$.data.enabled").value(false));
     }
 
 }

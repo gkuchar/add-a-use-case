@@ -14,11 +14,13 @@
       <el-input v-model="studentBeingEdited.username"></el-input>
     </el-form-item>
     <el-form-item label="Status:" prop="enabled">
+      <!-- BR-student-lifecycle: an active student is deactivated only from the student page (UC-STU-deactivate-student) -->
       <el-switch
         v-model="studentBeingEdited.enabled"
+        :disabled="wasActive"
         inline-prompt
-        active-text="Enabled"
-        inactive-text="Disabled"
+        active-text="Active"
+        inactive-text="Deactivated"
         style="--el-switch-on-color: #13ce66; --el-switch-off-color: #ff4949"
       />
     </el-form-item>
@@ -87,6 +89,8 @@ const rules = {
   ]
 }
 
+const wasActive = ref<boolean>(false)
+
 async function loadStudent(studentId: number) {
   // Load the user to be edited
   const result = await findStudentById(studentId)
@@ -94,6 +98,7 @@ async function loadStudent(studentId: number) {
   studentBeingEdited.value.id = result.data.id as number
   studentBeingEdited.value.username = result.data.username
   studentBeingEdited.value.enabled = result.data.enabled
+  wasActive.value = result.data.enabled === true
   studentBeingEdited.value.firstName = result.data.firstName
   studentBeingEdited.value.lastName = result.data.lastName
   studentBeingEdited.value.email = result.data.email

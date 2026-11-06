@@ -220,8 +220,14 @@ public class EvaluationService {
 
         report.setSectionName(this.sectionRepository.findById(sectionId).orElseThrow(() -> new ObjectNotFoundException("section", sectionId)).getSectionName());
 
-        // Get all students in the section
-        List<Student> students = this.studentRepository.findBySectionSectionId(sectionId).stream().filter(student -> student.getTeam() != null).collect(Collectors.toList());
+        // List every student on a team in the section, and also anyone who evaluated or was evaluated that week, so a
+        // student who has since left her team (removed or deactivated) still shows for the weeks she took part in.
+        Map<Integer, Set<Integer>> evaluateeIdsByEvaluator = findEvaluateeIdsByEvaluator(sectionId, week);
+        Set<Integer> participantIds = new HashSet<>(evaluateeIdsByEvaluator.keySet());
+        evaluateeIdsByEvaluator.values().forEach(participantIds::addAll);
+        List<Student> students = this.studentRepository.findBySectionSectionId(sectionId).stream()
+                .filter(student -> student.getTeam() != null || participantIds.contains(student.getId()))
+                .collect(Collectors.toList());
 
         // For each student, compute her average total score, collect all public comments and private comments, and compute rating averages for each criterion.
         students.forEach(student -> {

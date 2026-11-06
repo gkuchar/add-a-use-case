@@ -5,6 +5,8 @@ import team.projectpulse.instructor.Instructor;
 import team.projectpulse.section.Section;
 import team.projectpulse.section.SectionRepository;
 import team.projectpulse.system.UserUtils;
+import team.projectpulse.system.exception.ObjectNotFoundException;
+import team.projectpulse.team.Team;
 import team.projectpulse.user.MyUserPrincipal;
 import team.projectpulse.user.userinvitation.UserInvitationService;
 import org.junit.jupiter.api.BeforeEach;
@@ -28,6 +30,7 @@ import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.*;
@@ -153,7 +156,7 @@ class StudentServiceTest {
     @Test
     void testInstructorUpdatesStudent() {
         // Given
-        Student update = new Student("john", "John (updated)", "Smith (updated)", "j.smith@abc.edu (updated)", "", false, "admin student");
+        Student update = new Student("john", "John (updated)", "Smith (updated)", "j.smith@abc.edu (updated)", "", true, "admin student");
         given(this.studentRepository.findById(1)).willReturn(Optional.of(this.students.get(0)));
         given(this.studentRepository.save(any(Student.class))).willReturn(this.students.get(0));
 
@@ -188,6 +191,111 @@ class StudentServiceTest {
 
         // Then
         verify(this.studentRepository, times(1)).deleteById(1);
+    }
+
+
+    private void loginAs(String roles) {
+        Instructor instructor = new Instructor();
+        instructor.setRoles(roles);
+        MyUserPrincipal myUserPrincipal = new MyUserPrincipal(instructor);
+        SecurityContext securityContext = SecurityContextHolder.createEmptyContext();
+        securityContext.setAuthentication(new UsernamePasswordAuthenticationToken(myUserPrincipal, null, myUserPrincipal.getAuthorities()));
+        SecurityContextHolder.setContext(securityContext);
+    }
+
+    @Test
+    void testInstructorCannotDeactivateStudentThroughUpdate() {
+        // Given: BR-student-lifecycle, deactivation goes only through deactivateStudent
+        Student update = new Student("john", "John", "Smith", "j.smith@abc.edu", "", false, "student");
+        given(this.studentRepository.findById(1)).willReturn(Optional.of(this.students.get(0)));
+        loginAs("instructor");
+
+        // When and then
+        assertThatThrownBy(() -> this.studentService.updateStudent(1, update))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Deactivate a student with the Deactivate action.");
+        verify(this.studentRepository, never()).save(any(Student.class));
+    }
+
+    @Test
+    void testInstructorReactivatesStudentThroughUpdate() {
+        // Given: until UC-STU-reactivate-student is built, PUT with enabled true still reactivates
+        Student john = this.students.get(0);
+        john.setEnabled(false);
+        Student update = new Student("john", "John", "Smith", "j.smith@abc.edu", "", true, "student");
+        given(this.studentRepository.findById(1)).willReturn(Optional.of(john));
+        given(this.studentRepository.save(any(Student.class))).willAnswer(invocation -> invocation.getArgument(0));
+        loginAs("instructor");
+
+        // When
+        Student result = this.studentService.updateStudent(1, update);
+
+        // Then
+        assertThat(result.isEnabled()).isTrue();
+    }
+
+    @Test
+    void testDeactivateStudentOnTeam() {
+        // Given
+        Student john = this.students.get(0);
+        Student eric = this.students.get(1);
+        Team team = new Team("Team1", "Team 1 description", "https://www.team1.com");
+        team.addStudent(john);
+        team.addStudent(eric);
+        given(this.studentRepository.findById(1)).willReturn(Optional.of(john));
+        given(this.studentRepository.save(any(Student.class))).willAnswer(invocation -> invocation.getArgument(0));
+
+        // When
+        DeactivationResult result = this.studentService.deactivateStudent(1);
+
+        // Then
+        assertThat(result.alreadyDeactivated()).isFalse();
+        assertThat(result.student().isEnabled()).isFalse();
+        assertThat(result.student().getTeam()).isNull();
+        assertThat(team.getStudents()).containsExactly(eric);
+        verify(this.studentRepository, times(1)).save(john);
+    }
+
+    @Test
+    void testDeactivateStudentOnNoTeam() {
+        // Given
+        Student john = this.students.get(0);
+        given(this.studentRepository.findById(1)).willReturn(Optional.of(john));
+        given(this.studentRepository.save(any(Student.class))).willAnswer(invocation -> invocation.getArgument(0));
+
+        // When
+        DeactivationResult result = this.studentService.deactivateStudent(1);
+
+        // Then
+        assertThat(result.alreadyDeactivated()).isFalse();
+        assertThat(result.student().isEnabled()).isFalse();
+        assertThat(result.student().getTeam()).isNull();
+    }
+
+    @Test
+    void testDeactivateStudentAlreadyDeactivated() {
+        // Given: extension 6a
+        Student john = this.students.get(0);
+        john.setEnabled(false);
+        given(this.studentRepository.findById(1)).willReturn(Optional.of(john));
+
+        // When
+        DeactivationResult result = this.studentService.deactivateStudent(1);
+
+        // Then
+        assertThat(result.alreadyDeactivated()).isTrue();
+        assertThat(result.student().isEnabled()).isFalse();
+        verify(this.studentRepository, never()).save(any(Student.class));
+    }
+
+    @Test
+    void testDeactivateStudentNotFound() {
+        // Given
+        given(this.studentRepository.findById(99)).willReturn(Optional.empty());
+
+        // When and then
+        assertThatThrownBy(() -> this.studentService.deactivateStudent(99))
+                .isInstanceOf(ObjectNotFoundException.class);
     }
 
 }
