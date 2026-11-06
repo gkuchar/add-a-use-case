@@ -16,13 +16,23 @@
       >
     </template>
   </div>
-  <StudentActivities :studentId="studentId" />
-  <el-divider />
-  <StudentEvaluations :studentId="studentId" />
+  <template v-if="inDefaultSection">
+    <StudentActivities :studentId="studentId" />
+    <el-divider />
+    <StudentEvaluations :studentId="studentId" />
+  </template>
+  <el-alert
+    v-else-if="student"
+    type="info"
+    :closable="false"
+    show-icon
+    data-cy="student-work-hidden"
+    title="This student's weekly activity reports and peer evaluations show only when their course section is your default course section."
+  />
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import StudentActivities from '../activities/admin/StudentActivities.vue'
 import StudentEvaluations from '../evaluations/admin/StudentEvaluations.vue'
@@ -31,14 +41,24 @@ import { useRoute } from 'vue-router'
 import { deactivateStudent, findStudentById } from '@/apis/student'
 import type { FindStudentByIdResponse, Student } from '@/apis/student/types'
 import { useUserInfoStore } from '@/stores/userInfo'
+import { useSettingsStore } from '@/stores/settings'
 
 const route = useRoute()
 const userInfoStore = useUserInfoStore()
+const settingsStore = useSettingsStore()
 
 const studentId: number = Number(route.params.studentId)
 const studentName = ref<string>('')
 const student = ref<Student>()
 const deactivating = ref<boolean>(false)
+
+// Both panels read the caller's default course section, not the student's (StudentEvaluations loads its rubric,
+// and the activities search is scoped server-side). A default course section can only be one she is assigned to,
+// so outside it the panels would show the wrong course section's data, or 403 for a course admin who is not
+// assigned to the student's course section and only came to deactivate (UC-STU-deactivate-student step 2).
+const inDefaultSection = computed(
+  () => student.value !== undefined && student.value.sectionId === settingsStore.defaultSectionId
+)
 
 async function loadStudent() {
   const result: FindStudentByIdResponse = await findStudentById(studentId)

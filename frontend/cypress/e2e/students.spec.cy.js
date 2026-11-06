@@ -93,6 +93,19 @@ describe('Deactivate a student', () => {
     cy.get('.el-message').should('contain', 'This student is already deactivated.')
   })
 
+  it('offers Deactivate but hides the work panels for a student outside the default course section (step 2)', () => {
+    // b.gates's default course section is 2; a student of another course section is what a course admin not
+    // assigned to it sees, and the panels would otherwise request that course section and 403.
+    const otherSectionJohn = { ...activeJohn, sectionId: 99, sectionName: 'Other' }
+    cy.intercept('GET', '**/api/v1/students/4', { body: found(otherSectionJohn) }).as('student')
+    cy.visit('/students/4')
+    cy.wait('@student')
+
+    cy.get('[data-cy=deactivate-student]').should('be.visible')
+    cy.get('[data-cy=student-work-hidden]').should('be.visible')
+    cy.location('pathname').should('eq', '/students/4')
+  })
+
   it('shows no Deactivate button for a deactivated student', () => {
     cy.intercept('GET', '**/api/v1/students/4', { body: found(deactivatedJohn) }).as('student')
     cy.visit('/students/4')
