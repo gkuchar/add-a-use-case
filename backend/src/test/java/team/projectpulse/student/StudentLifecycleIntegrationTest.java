@@ -1,5 +1,6 @@
 package team.projectpulse.student;
 
+import jakarta.persistence.EntityManager;
 import org.json.JSONObject;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -10,15 +11,28 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 import team.projectpulse.AbstractIntegrationTest;
+import team.projectpulse.activity.ActivityRepository;
+import team.projectpulse.evaluation.PeerEvaluationRepository;
+import team.projectpulse.team.Team;
+import team.projectpulse.team.TeamRepository;
 import team.projectpulse.instructor.Instructor;
 import team.projectpulse.instructor.InstructorRepository;
 import team.projectpulse.section.Section;
 import team.projectpulse.section.SectionRepository;
 import team.projectpulse.system.StatusCode;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.BDDMockito.willThrow;
+import static org.mockito.Mockito.reset;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.httpBasic;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -39,6 +53,24 @@ class StudentLifecycleIntegrationTest extends AbstractIntegrationTest {
 
     @Autowired
     InstructorRepository instructorRepository;
+
+    @MockitoSpyBean
+    StudentRepository studentRepository;
+
+    @Autowired
+    TeamRepository teamRepository;
+
+    @Autowired
+    ActivityRepository activityRepository;
+
+    @Autowired
+    PeerEvaluationRepository peerEvaluationRepository;
+
+    @Autowired
+    EntityManager entityManager;
+
+    @Autowired
+    TransactionTemplate transactionTemplate;
 
     @Value("${api.endpoint.base-url}")
     String baseUrl;
@@ -94,6 +126,150 @@ class StudentLifecycleIntegrationTest extends AbstractIntegrationTest {
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.flag").value(false))
                 .andExpect(jsonPath("$.code").value(StatusCode.FORBIDDEN));
+    }
+
+    // PATCH /students/{studentId}/deactivate
+
+    private org.springframework.test.web.servlet.ResultActions deactivate(Integer studentId, String token) throws Exception {
+        return this.mockMvc.perform(patch(this.baseUrl + "/students/" + studentId + "/deactivate").accept(MediaType.APPLICATION_JSON).header(HttpHeaders.AUTHORIZATION, token));
+    }
+
+    private Student reloadStudent(Integer studentId) {
+        this.entityManager.flush();
+        this.entityManager.clear();
+        return this.studentRepository.findById(studentId).orElseThrow();
+    }
+
+    @Test
+    void testAssignedInstructorDeactivatesStudent() throws Exception {
+        long activities = this.activityRepository.count();
+        long evaluations = this.peerEvaluationRepository.count();
+
+        deactivate(4, this.instructorBillToken)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.flag").value(true))
+                .andExpect(jsonPath("$.code").value(StatusCode.SUCCESS))
+                .andExpect(jsonPath("$.message").value("Deactivate student successfully"))
+                .andExpect(jsonPath("$.data.id").value(4))
+                .andExpect(jsonPath("$.data.enabled").value(false))
+                .andExpect(jsonPath("$.data.teamId").doesNotExist());
+
+        Student john = reloadStudent(4);
+        assertThat(john.isEnabled()).isFalse();
+        assertThat(john.getTeam()).isNull();
+        assertThat(this.teamRepository.findById(1).orElseThrow().getStudents()).extracting(Student::getId).doesNotContain(4);
+        // Her weekly activity reports and peer evaluations stay.
+        assertThat(this.activityRepository.count()).isEqualTo(activities);
+        assertThat(this.peerEvaluationRepository.count()).isEqualTo(evaluations);
+    }
+
+    @Test
+    void testUnassignedOwningCourseAdminDeactivatesStudent() throws Exception {
+        unassignFromSection2(1);
+
+        deactivate(4, this.adminBingyangToken)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("Deactivate student successfully"))
+                .andExpect(jsonPath("$.data.enabled").value(false));
+        assertThat(reloadStudent(4).isEnabled()).isFalse();
+    }
+
+    @Test
+    void testDeactivateStudentOnNoTeam() throws Exception {
+        // Tracy (section 2) is on no team
+        Integer tracyId = this.studentRepository.findAll().stream().filter(s -> s.getEmail().equals("t.nicholson@abc.edu")).findFirst().orElseThrow().getId();
+
+        deactivate(tracyId, this.instructorBillToken)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("Deactivate student successfully"));
+        assertThat(reloadStudent(tracyId).isEnabled()).isFalse();
+    }
+
+    @Test
+    void testDeactivateAlreadyDeactivatedStudent() throws Exception {
+        // Extension 6a
+        deactivate(4, this.instructorBillToken).andExpect(status().isOk());
+        reloadStudent(4);
+
+        deactivate(4, this.adminBingyangToken)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.flag").value(true))
+                .andExpect(jsonPath("$.code").value(StatusCode.SUCCESS))
+                .andExpect(jsonPath("$.message").value("This student is already deactivated."))
+                .andExpect(jsonPath("$.data.enabled").value(false));
+
+        Student john = reloadStudent(4);
+        assertThat(john.isEnabled()).isFalse();
+        assertThat(john.getTeam()).isNull();
+    }
+
+    private void expectForbidden(Integer studentId, String token) throws Exception {
+        deactivate(studentId, token)
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.flag").value(false))
+                .andExpect(jsonPath("$.code").value(StatusCode.FORBIDDEN))
+                .andExpect(jsonPath("$.message").value("No permission."));
+    }
+
+    @Test
+    void testStudentCannotDeactivateHerself() throws Exception {
+        expectForbidden(4, this.studentJohnToken);
+        assertThat(reloadStudent(4).isEnabled()).isTrue();
+    }
+
+    @Test
+    void testStudentCannotDeactivateAnotherStudent() throws Exception {
+        expectForbidden(4, this.studentEricToken);
+        assertThat(reloadStudent(4).isEnabled()).isTrue();
+    }
+
+    @Test
+    void testUnassignedInstructorCannotDeactivateStudent() throws Exception {
+        unassignFromSection2(2);
+        expectForbidden(4, this.instructorBillToken);
+        assertThat(reloadStudent(4).isEnabled()).isTrue();
+    }
+
+    @Test
+    void testAnotherCoursesAdminCannotDeactivateStudent() throws Exception {
+        expectForbidden(4, this.adminTimToken);
+        assertThat(reloadStudent(4).isEnabled()).isTrue();
+    }
+
+    @Test
+    void testDeactivateUnknownStudentIsForbidden() throws Exception {
+        expectForbidden(9999, this.adminBingyangToken);
+    }
+
+    @Test
+    @Transactional(propagation = Propagation.NOT_SUPPORTED) // Let the service transaction really commit or roll back.
+    void testDeactivationIsAtomic() throws Exception {
+        willThrow(new RuntimeException("save failed")).given(this.studentRepository).save(any(Student.class));
+        try {
+            deactivate(4, this.instructorBillToken)
+                    .andExpect(status().is5xxServerError())
+                    .andExpect(jsonPath("$.flag").value(false));
+
+            reset(this.studentRepository);
+            this.transactionTemplate.executeWithoutResult(tx -> {
+                Student john = this.studentRepository.findById(4).orElseThrow();
+                assertThat(john.isEnabled()).isTrue();
+                assertThat(john.getTeam()).isNotNull();
+                assertThat(john.getTeam().getTeamId()).isEqualTo(1);
+            });
+        } finally {
+            reset(this.studentRepository);
+            // Restore the seeded state should the rollback ever fail, since this test commits outside the test transaction.
+            this.transactionTemplate.executeWithoutResult(tx -> {
+                Student john = this.studentRepository.findById(4).orElseThrow();
+                if (!john.isEnabled() || john.getTeam() == null) {
+                    john.setEnabled(true);
+                    Team team1 = this.teamRepository.findById(1).orElseThrow();
+                    if (john.getTeam() == null) team1.addStudent(john);
+                    this.studentRepository.save(john);
+                }
+            });
+        }
     }
 
 }
