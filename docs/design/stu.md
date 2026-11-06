@@ -58,7 +58,7 @@ classDiagram
 - **`student` (changed):**
   - [`StudentController`](../../backend/src/main/java/team/projectpulse/student/StudentController.java) adds `PATCH /{studentId}/deactivate`.
   - [`StudentService`](../../backend/src/main/java/team/projectpulse/student/StudentService.java) adds `deactivateStudent`, which returns a `DeactivationResult(Student student, boolean alreadyDeactivated)` record; the controller picks the message from the flag. It calls `studentRepository.save` explicitly after the change. `Team.removeStudent` removes her from the team's list and nulls `Student.team`, the owning side, so the save persists the removal.
-  - `updateStudent` refuses a change of `enabled` from true to false for every caller, whatever her role.
+  - `updateStudent` refuses a change of `enabled` from true to false where it applies `enabled` at all, which is for an instructor caller. A student's `enabled` field is ignored, as before.
   - [`StudentSecurityService`](../../backend/src/main/java/team/projectpulse/student/StudentSecurityService.java) adds `isCurrentUserAdminOfStudentCourse`. It is true when the course admin of the student's course section's course is the caller (`UserUtils.getUserId()`), with no role check, and false for an unknown id, like its siblings. The existing `isCurrentUserInstructorOfStudentSection` checks the instructors assigned to the student's course section, not her team's instructor, so it admits an assigned instructor for a student on no team.
 - **`security` (new):**
   - `authorizationmanagers/StudentLifecycleAuthorizationManager` reads `studentId` and admits `isCurrentUserInstructorOfStudentSection || isCurrentUserAdminOfStudentCourse`. UC-STU-reactivate-student will reuse it.

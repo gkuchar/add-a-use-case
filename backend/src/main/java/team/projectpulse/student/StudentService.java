@@ -3,6 +3,7 @@ package team.projectpulse.student;
 import team.projectpulse.section.Section;
 import team.projectpulse.section.SectionRepository;
 import team.projectpulse.system.UserUtils;
+import team.projectpulse.team.Team;
 import team.projectpulse.system.exception.ObjectNotFoundException;
 import team.projectpulse.user.userinvitation.UserInvitationService;
 import jakarta.transaction.Transactional;
@@ -118,11 +119,36 @@ public class StudentService {
 
         // If the user is an admin, then the user can update all the fields
         if (authentication.getAuthorities().stream().anyMatch(grantedAuthority -> grantedAuthority.getAuthority().equals("ROLE_instructor"))) {
+            // BR-student-lifecycle: deactivation goes only through deactivateStudent, which removes her from her team
+            // and is guarded by its own route rule. Reactivation through this path stays until UC-STU-reactivate-student.
+            if (oldStudent.isEnabled() && !update.isEnabled()) {
+                throw new IllegalArgumentException("Deactivate a student with the Deactivate action.");
+            }
             oldStudent.setEnabled(update.isEnabled());
 //            oldStudent.setRoles(update.getRoles());
         }
 
         return this.studentRepository.save(oldStudent);
+    }
+
+    /**
+     * Deactivates a student (UC-STU-deactivate-student): removes her from her team, if she has one, and disables her
+     * account, in one transaction. Her weekly activity reports and peer evaluations are kept. A student who is already
+     * deactivated is left unchanged (extension 6a).
+     */
+    public DeactivationResult deactivateStudent(Integer studentId) {
+        Student student = this.studentRepository.findById(studentId)
+                .orElseThrow(() -> new ObjectNotFoundException("student", studentId));
+        if (!student.isEnabled()) {
+            return new DeactivationResult(student, true);
+        }
+        Team team = student.getTeam();
+        if (team != null) {
+            team.removeStudent(student); // Nulls Student.team, the owning side, so the save below persists the removal.
+        }
+        student.setEnabled(false);
+        Student saved = this.studentRepository.save(student);
+        return new DeactivationResult(saved, false);
     }
 
     public void deleteStudent(Integer studentId) {
