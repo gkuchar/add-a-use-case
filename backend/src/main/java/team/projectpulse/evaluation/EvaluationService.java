@@ -222,11 +222,9 @@ public class EvaluationService {
 
         // List every student on a team in the section, and also anyone who evaluated or was evaluated that week, so a
         // student who has since left her team (removed or deactivated) still shows for the weeks she took part in.
-        Set<Integer> participantIds = new HashSet<>();
-        for (Object[] pair : this.evaluationRepository.findEvaluatorAndEvaluateeIds(sectionId, week)) {
-            participantIds.add((Integer) pair[0]);
-            participantIds.add((Integer) pair[1]);
-        }
+        Map<Integer, Set<Integer>> evaluateeIdsByEvaluator = findEvaluateeIdsByEvaluator(sectionId, week);
+        Set<Integer> participantIds = new HashSet<>(evaluateeIdsByEvaluator.keySet());
+        evaluateeIdsByEvaluator.values().forEach(participantIds::addAll);
         List<Student> students = this.studentRepository.findBySectionSectionId(sectionId).stream()
                 .filter(student -> student.getTeam() != null || participantIds.contains(student.getId()))
                 .collect(Collectors.toList());
