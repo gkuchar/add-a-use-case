@@ -7,8 +7,8 @@ import org.springframework.stereotype.Service;
 /**
  * Answers the questions a route asks about one named student: is that student the caller herself
  * ({@code isStudentSelf}), is the caller an instructor of that student's course section
- * ({@code isCurrentUserInstructorOfStudentSection}), and is the caller the course admin of that student's course
- * ({@code isCurrentUserAdminOfStudentCourse}).
+ * ({@code isCurrentUserInstructorOfStudentSection}), and may the caller manage that student's lifecycle as an
+ * assigned instructor or the course admin of her course ({@code isCurrentUserInstructorOrAdminOfStudent}).
  *
  * <p>Every check fails closed: an id that names no row, or a link not yet established, is denied rather than
  * throwing. These methods run inside an {@code AuthorizationManager}, upstream of the {@code DispatcherServlet},
@@ -39,30 +39,35 @@ public class StudentSecurityService {
      * @return
      */
     public boolean isCurrentUserInstructorOfStudentSection(Integer studentId) {
-        Integer instructorIdFromJwt = this.userUtils.getUserId();
-        Student student = this.studentRepository.findById(studentId).orElse(null);
-        if (student == null) {
-            return false;
-        }
-        return student.getSection().getInstructors().stream()
-                .anyMatch(instructor -> instructor.getId().equals(instructorIdFromJwt));
+        Integer userIdFromJwt = this.userUtils.getUserId();
+        return this.studentRepository.findById(studentId)
+                .map(student -> isInstructorOfSection(student, userIdFromJwt))
+                .orElse(false);
     }
 
     /**
-     * Check if the user is the course admin of the course that the student's course section belongs to, whether or
-     * not she is assigned to that course section (BR-student-lifecycle). No role check: being named course admin is
-     * the right.
+     * Check if the user may manage the student's lifecycle (BR-student-lifecycle): an instructor assigned to her
+     * course section, or the course admin of her course whether or not she is assigned to that course section. No
+     * role check: being named course admin is the right. Loads the student once for both questions.
      *
      * @param studentId the id of the student we need to access, this is NOT the current user's Id
      * @return false for an unknown student
      */
-    public boolean isCurrentUserAdminOfStudentCourse(Integer studentId) {
-        Integer adminIdFromJwt = this.userUtils.getUserId();
-        Student student = this.studentRepository.findById(studentId).orElse(null);
-        if (student == null) {
-            return false;
-        }
-        return student.getSection().getCourse().getCourseAdmin().getId().equals(adminIdFromJwt);
+    public boolean isCurrentUserInstructorOrAdminOfStudent(Integer studentId) {
+        Integer userIdFromJwt = this.userUtils.getUserId();
+        return this.studentRepository.findById(studentId)
+                .map(student -> isInstructorOfSection(student, userIdFromJwt) || isAdminOfCourse(student, userIdFromJwt))
+                .orElse(false);
+    }
+
+    // Student.section, Section.course, and Course.courseAdmin are all mandatory (@ManyToOne(optional = false)).
+    private static boolean isInstructorOfSection(Student student, Integer userId) {
+        return student.getSection().getInstructors().stream()
+                .anyMatch(instructor -> instructor.getId().equals(userId));
+    }
+
+    private static boolean isAdminOfCourse(Student student, Integer userId) {
+        return student.getSection().getCourse().getCourseAdmin().getId().equals(userId);
     }
 
 }

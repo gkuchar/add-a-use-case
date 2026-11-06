@@ -34,9 +34,7 @@ public class StudentLifecycleAuthorizationManager implements AuthorizationManage
         if (studentId == null) {
             return new AuthorizationDecision(false);
         }
-        return new AuthorizationDecision(
-                this.studentSecurityService.isCurrentUserInstructorOfStudentSection(studentId)
-                        || this.studentSecurityService.isCurrentUserAdminOfStudentCourse(studentId));
+        return new AuthorizationDecision(this.studentSecurityService.isCurrentUserInstructorOrAdminOfStudent(studentId));
     }
 
 }
