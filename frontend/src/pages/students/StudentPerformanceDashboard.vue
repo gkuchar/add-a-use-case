@@ -62,10 +62,12 @@ async function confirmDeactivation() {
   try {
     const result = await deactivateStudent(studentId)
     ElMessage.success(result.message)
-    await loadStudent()
+  } catch {
+    // The request interceptor has already reported the error (or redirected, on a 403).
   } finally {
     deactivating.value = false
   }
+  await loadStudent() // Show her status as it now stands, whether or not the request succeeded.
 }
 
 onMounted(loadStudent)
